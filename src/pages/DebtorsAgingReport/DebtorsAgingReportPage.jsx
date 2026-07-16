@@ -181,6 +181,17 @@ const DownloadIcon = (p) => (
     }
   />
 );
+const PencilIcon = (p) => (
+  <Icon
+    {...p}
+    path={
+      <>
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+      </>
+    }
+  />
+);
 
 /* =============================================================================
     CONSTANTS / CONFIG
@@ -191,10 +202,11 @@ const TAB_KEYS = {
   FORMAT_FACE: "FORMAT_FACE",
 };
 
+// Order: Customer Wise (default), Format Face, then Detailed Aging.
 const tabList = [
-  { key: TAB_KEYS.DETAILED, label: "Detailed Aging", icon: TableIcon },
   { key: TAB_KEYS.CUSTOMER_WISE, label: "Customer Wise", icon: UsersIcon },
   { key: TAB_KEYS.FORMAT_FACE, label: "Format Face", icon: LayoutIcon },
+  { key: TAB_KEYS.DETAILED, label: "Detailed Aging", icon: TableIcon },
 ];
 
 const initialFilters = {
@@ -298,14 +310,23 @@ const detailedColumns = [
   col("OVERDUE_AMOUNT", "Overdue", "amount", 120),
 ];
 
+// NOTE: "Due" under Payment Against Dispatch was removed — bifurcated
+// (days-wise) data is already captured via the <30/<45/.../>180 columns.
 const custWiseColumns = [
   col("CUSTOMER_NAME", "Customer Name", "text", 220, { sticky: true }),
-  col("TOTAL_AMT_NOT_DUE", "Not Due", "amount", 110, { group: "Total Amnt" }),
-  col("TOTAL_AMT_DUE", "Due", "amount", 110, { group: "Total Amnt" }),
+  col("TOTAL_AMT_NOT_DUE", "Not Due", "amount", 110, {
+    group: "Total Amnt",
+    tint: "bg-teal-50",
+    tintText: "text-teal-700",
+  }),
+  col("TOTAL_AMT_DUE", "Due", "amount", 110, {
+    group: "Total Amnt",
+    tint: "bg-rose-50",
+    tintText: "text-rose-700",
+  }),
   col("PAD_NOT_DUE", "Not Due", "amount", 100, {
     group: "Payment Against Dispatch",
   }),
-  col("PAD_DUE", "Due", "amount", 90, { group: "Payment Against Dispatch" }),
   col("PAD_DUE_LT_30", "<30 days", "amount", 95, {
     group: "Payment Against Dispatch",
   }),
@@ -329,19 +350,28 @@ const custWiseColumns = [
   col("PBG_NOT_DUE", "Not Due", "amount", 100, { group: "Against PBG" }),
   col("PBG_DUE", "Due", "amount", 90, { group: "Against PBG" }),
   col("UNALLOCATED_PAYMENTS", "Unallocated Payments", "amount", 130),
-  col("REMARKS", "Remarks", "text", 320),
+  // `editable: true` enables the local Edit/Add button in the table.
+  // No API is wired up yet — edits are kept in local state only.
+  col("REMARKS", "Remarks", "text", 320, { editable: true }),
 ];
 
 const formatFaceColumns = [
   col("DATE", "Date", "date", 100),
   col("CUSTOMER_NAME", "Customer Name", "text", 220, { sticky: true }),
   col("AGEING", "Ageing (days)", "number", 100),
-  col("TOTAL_AMT_NOT_DUE", "Not Due", "amount", 110, { group: "Total Amnt" }),
-  col("TOTAL_AMT_DUE", "Due", "amount", 110, { group: "Total Amnt" }),
+  col("TOTAL_AMT_NOT_DUE", "Not Due", "amount", 110, {
+    group: "Total Amnt",
+    tint: "bg-teal-50",
+    tintText: "text-teal-700",
+  }),
+  col("TOTAL_AMT_DUE", "Due", "amount", 110, {
+    group: "Total Amnt",
+    tint: "bg-rose-50",
+    tintText: "text-rose-700",
+  }),
   col("PAD_NOT_DUE", "Not Due", "amount", 100, {
     group: "Payment Against Dispatch",
   }),
-  col("PAD_DUE", "Due", "amount", 90, { group: "Payment Against Dispatch" }),
   col("PAD_DUE_LT_30", "<30 days", "amount", 95, {
     group: "Payment Against Dispatch",
   }),
@@ -480,13 +510,18 @@ const getCellDisplay = (row, column) => {
 /* =============================================================================
     REUSABLE DATA TABLE
 ============================================================================= */
-const DataTable = ({ columns, rows, loading, fullscreen }) => {
+const DataTable = ({ columns, rows, loading, fullscreen, onEditCell }) => {
   const [sort, setSort] = useState({ key: null, dir: null });
   const [selectedKey, setSelectedKey] = useState(null);
   const stickyRefs = useRef({});
   const [stickyOffsets, setStickyOffsets] = useState({});
   const headerRow1Ref = useRef(null);
   const [row1Height, setRow1Height] = useState(0);
+
+  // Local-only inline editing state (e.g. Remarks). `editingKey` is
+  // `${rowKey}::${columnKey}`; no backend call is made yet.
+  const [editingKey, setEditingKey] = useState(null);
+  const [editValue, setEditValue] = useState("");
 
   const stickyCols = useMemo(() => columns.filter((c) => c.sticky), [columns]);
   const hasGroups = useMemo(() => columns.some((c) => c.group), [columns]);
@@ -525,6 +560,13 @@ const DataTable = ({ columns, rows, loading, fullscreen }) => {
     }
   }, [hasGroups, columns]);
 
+  // Reset any in-progress local edit whenever the underlying rows change
+  // (e.g. switching tabs or re-fetching), so we don't point at a stale row.
+  useEffect(() => {
+    setEditingKey(null);
+    setEditValue("");
+  }, [rows]);
+
   const sortedRows = useMemo(() => {
     if (!sort.key) return rows;
     const column = columns.find((c) => c.key === sort.key);
@@ -550,6 +592,21 @@ const DataTable = ({ columns, rows, loading, fullscreen }) => {
   };
 
   const stickyStyle = (key) => ({ left: stickyOffsets[key] ?? 0 });
+
+  const startEditing = (rowKey, columnKey, currentValue) => {
+    setEditingKey(`${rowKey}::${columnKey}`);
+    setEditValue(
+      currentValue === null || currentValue === undefined
+        ? ""
+        : String(currentValue),
+    );
+  };
+
+  const commitEdit = (rowKey, columnKey) => {
+    onEditCell?.(rowKey, columnKey, editValue);
+    setEditingKey(null);
+    setEditValue("");
+  };
 
   if (loading) {
     return (
@@ -706,6 +763,7 @@ const DataTable = ({ columns, rows, loading, fullscreen }) => {
               >
                 {columns.map((c) => {
                   const { text, negative } = getCellDisplay(row, c);
+                  const isEditingCell = editingKey === `${rk}::${c.key}`;
                   return (
                     <td
                       key={c.key}
@@ -717,14 +775,68 @@ const DataTable = ({ columns, rows, loading, fullscreen }) => {
                         c.type === "amount" || c.type === "number"
                           ? "text-right"
                           : "text-left"
-                      } ${negative ? "text-rose-600" : "text-slate-700"} ${c.key === "REMARKS" ? "max-w-[320px] truncate" : ""}`}
+                      } ${negative ? "text-rose-600" : "text-slate-700"} ${c.key === "REMARKS" ? "max-w-[320px]" : ""}`}
                       title={
-                        c.key === "REMARKS"
+                        c.key === "REMARKS" && !isEditingCell
                           ? String(row[c.key] ?? "")
                           : undefined
                       }
+                      onClick={
+                        c.editable ? (e) => e.stopPropagation() : undefined
+                      }
                     >
-                      {text}
+                      {c.editable ? (
+                        isEditingCell ? (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              autoFocus
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") commitEdit(rk, c.key);
+                                else if (e.key === "Escape") {
+                                  setEditingKey(null);
+                                  setEditValue("");
+                                }
+                              }}
+                              className="h-8 w-full min-w-[160px] rounded-lg border border-teal-300 bg-white px-2 text-[12.5px] text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/20"
+                            />
+                            <button
+                              onClick={() => commitEdit(rk, c.key)}
+                              className="shrink-0 rounded-lg bg-teal-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-teal-700"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingKey(null);
+                                setEditValue("");
+                              }}
+                              className="shrink-0 rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-50"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate">{text}</span>
+                            <button
+                              onClick={() =>
+                                startEditing(rk, c.key, row[c.key])
+                              }
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:border-teal-300 hover:text-teal-700"
+                              title={
+                                row[c.key] ? "Edit remarks" : "Add remarks"
+                              }
+                            >
+                              <PencilIcon className="h-3 w-3" />
+                              {row[c.key] ? "Edit" : "Add"}
+                            </button>
+                          </div>
+                        )
+                      ) : (
+                        text
+                      )}
                     </td>
                   );
                 })}
@@ -756,7 +868,8 @@ const inputClass =
     MAIN PAGE
 ============================================================================= */
 const DebtorsReportPage = () => {
-  const [activeTab, setActiveTab] = useState(TAB_KEYS.DETAILED);
+  // Default tab is now Customer Wise.
+  const [activeTab, setActiveTab] = useState(TAB_KEYS.CUSTOMER_WISE);
   const [filters, setFilters] = useState(initialFilters);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -859,7 +972,8 @@ const DebtorsReportPage = () => {
   };
 
   useEffect(() => {
-    fetchTabData(TAB_KEYS.DETAILED);
+    // Load the default (Customer Wise) tab first.
+    fetchTabData(TAB_KEYS.CUSTOMER_WISE);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -892,6 +1006,19 @@ const DebtorsReportPage = () => {
   };
 
   const resetFilters = () => setFilters(initialFilters);
+
+  // Local-only remarks edit (Customer Wise tab). Updates state in memory;
+  // wire this up to a save API once the backend endpoint exists.
+  const handleEditCell = (rowKey, columnKey, value) => {
+    setRowsByTab((prev) => {
+      const rows = prev[activeTab] || [];
+      const updatedRows = rows.map((r) =>
+        r.__rowKey === rowKey ? { ...r, [columnKey]: value } : r,
+      );
+      return { ...prev, [activeTab]: updatedRows };
+    });
+    // TODO: call DebtorsAgingReportService.updateRemarks(...) once available.
+  };
 
   const currentRows = rowsByTab[activeTab] || [];
   const currentConfig = TAB_CONFIG[activeTab];
@@ -964,12 +1091,8 @@ const DebtorsReportPage = () => {
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="min-w-0">
                 <h1 className="mt-3 text-xl font-semibold tracking-tight text-slate-900">
-                  Debtors Report
+                  Debtors Aging Automation
                 </h1>
-                <p className="mt-1 text-sm text-slate-500">
-                  Receivable aging across detailed transactions, customer
-                  summaries and management format face.
-                </p>
               </div>
               <div className="grid grid-cols-3 gap-2 xl:min-w-[420px]" />
             </div>
@@ -1263,6 +1386,7 @@ const DebtorsReportPage = () => {
             rows={currentRows}
             loading={loading}
             fullscreen={isFullscreen}
+            onEditCell={handleEditCell}
           />
 
           {/* ---------- Pagination ---------- */}
