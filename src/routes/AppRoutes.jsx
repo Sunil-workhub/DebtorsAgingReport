@@ -11,7 +11,7 @@ const AppRoutes = () => {
     <BrowserRouter>
       <Routes>
         {/* 🔄 Root Redirect: Fallback default path */}
-        <Route path="/" element={<Navigate to="/" replace />} />
+        {/* <Route path="/" element={<Navigate to="/" replace />} /> */}
 
         {/* 🔒 Protected Routes (mapped directly from menuConfig) */}
         <Route
