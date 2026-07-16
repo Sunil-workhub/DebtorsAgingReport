@@ -510,7 +510,14 @@ const getCellDisplay = (row, column) => {
 /* =============================================================================
     REUSABLE DATA TABLE
 ============================================================================= */
-const DataTable = ({ columns, rows, loading, fullscreen, onEditCell }) => {
+const DataTable = ({
+  columns,
+  rows,
+  loading,
+  fullscreen,
+  onEditCell,
+  activeTab,
+}) => {
   const [sort, setSort] = useState({ key: null, dir: null });
   const [selectedKey, setSelectedKey] = useState(null);
   const stickyRefs = useRef({});
@@ -642,7 +649,7 @@ const DataTable = ({ columns, rows, loading, fullscreen, onEditCell }) => {
 
   return (
     <div
-      className={`overflow-auto ${fullscreen ? "max-h-[calc(100vh-150px)]" : "max-h-[40vh]"}`}
+      className={`overflow-auto ${fullscreen ? "max-h-[calc(100vh-150px)]" : activeTab === TAB_KEYS.DETAILED ? "max-h-[42vh]" : "max-h-[50vh]"}`}
     >
       <table className="min-w-full border-separate border-spacing-0 text-[12.5px] tabular-nums">
         <thead>
@@ -1275,20 +1282,24 @@ const DebtorsReportPage = () => {
                       <option value="AG_MORE_THAN_1095">More than 1095</option>
                     </select>
                   </FilterField>
-                  <FilterField label="Page Size">
-                    <select
-                      value={filters.pageSize}
-                      onChange={(e) =>
-                        updateFilter("pageSize", Number(e.target.value))
-                      }
-                      className={inputClass}
-                    >
-                      <option value={25}>25 rows</option>
-                      <option value={50}>50 rows</option>
-                      <option value={100}>100 rows</option>
-                      <option value={200}>200 rows</option>
-                    </select>
-                  </FilterField>
+                  {/* Pagination is only meaningful for Detailed Aging today,
+                      so the page-size control is hidden on the other tabs. */}
+                  {activeTab === TAB_KEYS.DETAILED && (
+                    <FilterField label="Page Size">
+                      <select
+                        value={filters.pageSize}
+                        onChange={(e) =>
+                          updateFilter("pageSize", Number(e.target.value))
+                        }
+                        className={inputClass}
+                      >
+                        <option value={25}>25 rows</option>
+                        <option value={50}>50 rows</option>
+                        <option value={100}>100 rows</option>
+                        <option value={200}>200 rows</option>
+                      </select>
+                    </FilterField>
+                  )}
                 </div>
               </div>
             </div>
@@ -1387,50 +1398,56 @@ const DebtorsReportPage = () => {
             loading={loading}
             fullscreen={isFullscreen}
             onEditCell={handleEditCell}
+            activeTab={activeTab}
           />
 
-          {/* ---------- Pagination ---------- */}
-          <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-5">
-            <p className="text-xs text-slate-500">
-              {currentRows.length ? (
-                <>
-                  Showing{" "}
-                  <span className="font-semibold text-slate-700">
-                    {(filters.pageNumber - 1) * filters.pageSize + 1}
-                  </span>
-                  {"–"}
-                  <span className="font-semibold text-slate-700">
-                    {(filters.pageNumber - 1) * filters.pageSize +
-                      currentRows.length}
-                  </span>{" "}
-                  · {filters.pageSize} rows/page
-                </>
-              ) : (
-                "No rows to show"
-              )}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => changePage(filters.pageNumber - 1)}
-                disabled={filters.pageNumber <= 1 || loading}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ArrowLeftIcon className="h-3.5 w-3.5" />
-                Prev
-              </button>
-              <span className="rounded-xl bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700">
-                Page {filters.pageNumber}
-              </span>
-              <button
-                onClick={() => changePage(filters.pageNumber + 1)}
-                disabled={currentRows.length < filters.pageSize || loading}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Next
-                <ArrowRightIcon className="h-3.5 w-3.5" />
-              </button>
+          {/* ---------- Pagination ----------
+              Only Detailed Aging paginates today. Customer Wise and Format
+              Face still send pageNumber/pageSize in the request payload
+              (see `payload` above), but there's no Prev/Next UI for them. */}
+          {activeTab === TAB_KEYS.DETAILED && (
+            <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-5">
+              <p className="text-xs text-slate-500">
+                {currentRows.length ? (
+                  <>
+                    Showing{" "}
+                    <span className="font-semibold text-slate-700">
+                      {(filters.pageNumber - 1) * filters.pageSize + 1}
+                    </span>
+                    {"–"}
+                    <span className="font-semibold text-slate-700">
+                      {(filters.pageNumber - 1) * filters.pageSize +
+                        currentRows.length}
+                    </span>{" "}
+                    · {filters.pageSize} rows/page
+                  </>
+                ) : (
+                  "No rows to show"
+                )}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => changePage(filters.pageNumber - 1)}
+                  disabled={filters.pageNumber <= 1 || loading}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ArrowLeftIcon className="h-3.5 w-3.5" />
+                  Prev
+                </button>
+                <span className="rounded-xl bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700">
+                  Page {filters.pageNumber}
+                </span>
+                <button
+                  onClick={() => changePage(filters.pageNumber + 1)}
+                  disabled={currentRows.length < filters.pageSize || loading}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                  <ArrowRightIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
