@@ -11,7 +11,7 @@ import React, {
 //   npm install xlsx
 import * as XLSX from "xlsx";
 
-import DebtorsAgingReportService from "../../services/DebtorsAgingReport/DebtorsAgingReportService";
+import DebtorsAgingReportService from "../../services/debtorsAgingReport/DebtorsAgingReportService";
 
 /* =============================================================================
     ICONS (inline, dependency-free)
