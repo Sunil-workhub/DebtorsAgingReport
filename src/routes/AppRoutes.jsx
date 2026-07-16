@@ -11,10 +11,7 @@ const AppRoutes = () => {
     <BrowserRouter>
       <Routes>
         {/* 🔄 Root Redirect: Fallback default path */}
-        <Route
-          path="/"
-          element={<Navigate to="/iReact/debtors-aging-report" replace />}
-        />
+        <Route path="/" element={<Navigate to="/" replace />} />
 
         {/* 🔒 Protected Routes (mapped directly from menuConfig) */}
         <Route
@@ -44,10 +41,7 @@ const AppRoutes = () => {
         </Route>
 
         {/* 🗺️ Catch-all Wildcard: If path doesn't match anything else, route to the report */}
-        <Route
-          path="*"
-          element={<Navigate to="/iReact/debtors-aging-report" replace />}
-        />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

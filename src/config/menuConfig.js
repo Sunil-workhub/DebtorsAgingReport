@@ -2,7 +2,7 @@ import { lazy } from "react";
 
 const menuConfig = [
   {
-    path: "/iReact/debtors-aging-report",
+    path: "/",
     component: lazy(
       () => import("../pages/DebtorsAgingReport/DebtorsAgingReportPage.jsx"),
     ),
