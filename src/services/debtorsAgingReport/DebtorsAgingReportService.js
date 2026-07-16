@@ -1,5 +1,5 @@
 // src/services/DebtorsAgingReport/DebtorsReportService.js
-import APIHelper from "../../context/ApiHelper";
+import APIHelper from "../../context/APIHelper";
 import API from "../../constants/API";
 
 const DebtorsReportService = {
